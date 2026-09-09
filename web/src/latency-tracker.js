@@ -44,13 +44,14 @@ export class LatencyTracker {
   }
 
   reset() {
+    this.accepting = true;
     this.turns = [];
     this.current = null;
     this.state = STATE.IDLE;
     this.noiseFloor = 0;
     this.botNoiseFloor = 0;
     this.lastBotActiveAt = Number.NEGATIVE_INFINITY;
-    this.lastBotSilentAt = Number.NEGATIVE_INFINITY;
+    this.botSilenceStartedAt = null;
     this.onsetRun = 0;
     this.onsetCandidate = null;
     this.botOnsetRun = 0;
@@ -60,6 +61,7 @@ export class LatencyTracker {
   // 本端音量上报：在 IDLE 时检测“开始说话”(T0)。
   // 去抖：连续 LOCAL_ONSET_FRAMES 帧越阈才确认，T0 记为首个越阈帧的时间。
   onLocalVolume(level) {
+    if (!this.accepting) return;
     const now = performance.now();
     if (this.state !== STATE.IDLE) {
       this.onsetRun = 0;
@@ -97,12 +99,13 @@ export class LatencyTracker {
   //      以过滤用户说话期回声残留、bot 说话中的短暂波动；
   //   3) 去抖 —— 连续 BOT_ONSET_FRAMES 帧越阈才确认，T4 记为首个越阈帧时间。
   onRemoteVolume(level) {
+    if (!this.accepting) return;
     const now = performance.now();
     const threshold = Math.max(BOT_AUDIO_THRESHOLD, this.botNoiseFloor + BOT_NOISE_MARGIN);
     if (level < threshold) {
       // 静默期缓慢跟踪 bot 侧噪声底，让阈值自适应远端底噪/编码残留。
       this.botNoiseFloor = this.botNoiseFloor * 0.9 + level * 0.1;
-      this.lastBotSilentAt = now;
+      if (this.botSilenceStartedAt == null) this.botSilenceStartedAt = now;
       this.botOnsetRun = 0;
       this.botOnsetCandidate = null;
       return;
@@ -110,7 +113,11 @@ export class LatencyTracker {
     this.lastBotActiveAt = now;
     // 首个越阈帧：要求前置静默期足够长，否则视为“仍在响”不启动边缘检测。
     if (this.botOnsetRun === 0) {
-      if (now - this.lastBotSilentAt < BOT_SILENCE_BEFORE_ONSET_MS) return;
+      const hadEnoughSilence = this.botSilenceStartedAt != null
+        && now - this.botSilenceStartedAt >= BOT_SILENCE_BEFORE_ONSET_MS;
+      // 一旦进入有声区间就结束本次静默期，不能让持续有声的时间被误算为前置静默。
+      this.botSilenceStartedAt = null;
+      if (!hadEnoughSilence) return;
       this.botOnsetCandidate = now;
     }
     this.botOnsetRun += 1;
@@ -126,6 +133,7 @@ export class LatencyTracker {
 
   // 字幕上屏：区分用户/助手，记录 T1/T2/T3。
   onSubtitle({ isAssistant, final }) {
+    if (!this.accepting) return;
     const now = performance.now();
     if (isAssistant) {
       if (this.current && this.current.t3 == null
@@ -210,6 +218,7 @@ export class LatencyTracker {
   // 结束对话时调用：冲刷未完成的当前轮，返回汇总结果。
   // 未完成轮标记 aborted=true，test.log 中会显式注明且不参与任何指标平均。
   finalize() {
+    this.accepting = false;
     if (this.current) {
       this.current.aborted = true;
       this.turns.push(this.current);

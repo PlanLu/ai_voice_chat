@@ -63,6 +63,7 @@ def build_start_request(room_id, user_id, task_id, voiceprint_ids):
                 "MaxTokens": 512,
                 "Temperature": 0.3,
                 "TopP": 0.8,
+                "ThinkingType": "disabled",
                 "SystemMessages": [SYSTEM_PROMPT],
                 "HistoryLength": 10,
             },

@@ -81,14 +81,16 @@ export class RtcSession {
     // 远端(bot)音量上报：用于检测 TTS 首帧播报。部分 SDK 版本无此事件，做存在性保护。
     if (VERTC.events.onRemoteAudioPropertiesReport) {
       this.engine.on(VERTC.events.onRemoteAudioPropertiesReport, (items, totalRemoteVolume) => {
-        const list = Array.isArray(items) ? items : [items];
+        const list = (Array.isArray(items) ? items : [items]).filter(Boolean);
         const bot = list.find(
           (item) => (item?.userId ?? item?.audioPropertiesInfo?.userId) === config.botUserId
         );
-        const level = audioLevel(bot ?? list[0], totalRemoteVolume != null
-          ? Math.min(100, totalRemoteVolume)
-          : undefined);
-        this.onRemoteVolume?.(level);
+        if (bot) {
+          this.onRemoteVolume?.(audioLevel(bot));
+        } else if (list.length === 0 && Number(totalRemoteVolume ?? 0) === 0) {
+          // 空列表且总音量为 0 可确认 bot 静默；存在其他远端用户时不能用其音量替代 bot。
+          this.onRemoteVolume?.(0);
+        }
       });
     }
     this.engine.on(VERTC.events.onRoomBinaryMessageReceived, this.onAgentMessage);

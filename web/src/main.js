@@ -91,7 +91,6 @@ function updatePublicConfig(nextConfig) {
 async function reportLatency() {
   const summary = tracker.finalize();
   if (!summary.totalTurns) return;
-  tracker.reset();
   try {
     const result = await api('/api/latency/report', {
       method: 'POST',

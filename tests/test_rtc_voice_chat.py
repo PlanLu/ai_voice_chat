@@ -47,6 +47,9 @@ class RTCVoiceChatTests(unittest.TestCase):
         self.assertEqual(voiceprint["IdList"], ["vp-1", "vp-2"])
         self.assertEqual(request["Config"]["ASRConfig"]["Provider"], "volcano")
         self.assertNotIn("Thinking", request["Config"]["LLMConfig"])
+        self.assertEqual(
+            request["Config"]["LLMConfig"]["ThinkingType"], "disabled"
+        )
         self.assertTrue(request["AgentConfig"]["EnableConversationStateCallback"])
 
     def test_generates_bound_rtc_token(self):

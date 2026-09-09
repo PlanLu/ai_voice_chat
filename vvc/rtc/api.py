@@ -14,6 +14,7 @@ class RTCAPI:
     ACTION_VERSIONS = {
         "RegisterVoicePrint": "2024-12-01",
         "ListVoicePrint": "2024-12-01",
+        "DeleteVoicePrint": "2024-12-01",
     }
 
     def __init__(self, access_key, secret_key):
@@ -38,6 +39,7 @@ class RTCAPI:
             for name in (
                 "RegisterVoicePrint",
                 "ListVoicePrint",
+                "DeleteVoicePrint",
                 "StartVoiceChat",
                 "StopVoiceChat",
             )
@@ -88,6 +90,13 @@ class RTCAPI:
 
     def start_voice_chat(self, body):
         return self.call("StartVoiceChat", body)
+
+    def delete_voiceprint(self, app_id, voiceprint_id):
+        """删除指定应用下的长期声纹。"""
+        return self.call(
+            "DeleteVoicePrint",
+            {"AppId": app_id, "VoicePrintId": voiceprint_id},
+        )
 
     def stop_voice_chat(self, app_id, room_id, task_id):
         return self.call(

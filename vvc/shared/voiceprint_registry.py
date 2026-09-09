@@ -16,10 +16,26 @@ class VoiceprintRegistry:
     def save(self, name, voiceprint_id):
         people = self.load()
         people[name] = voiceprint_id
+        self._write(people)
+
+    def _write(self, people):
         self.path.write_text(
             json.dumps(people, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
+
+    def remove_by_id(self, voiceprint_id):
+        people = self.load()
+        matched_name = next(
+            (name for name, registered_id in people.items()
+             if registered_id == voiceprint_id),
+            None,
+        )
+        if matched_name is None:
+            return None
+        del people[matched_name]
+        self._write(people)
+        return matched_name
 
     def voiceprint_ids(self):
         return list(self.load().values())

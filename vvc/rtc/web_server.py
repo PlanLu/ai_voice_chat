@@ -200,6 +200,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.stop_session(body)
             elif path == "/api/voiceprint/register":
                 self.register_voiceprint(body)
+            elif path == "/api/voiceprint/delete":
+                self.delete_voiceprint(body)
             elif path == "/api/latency/report":
                 self.report_latency(body)
             else:
@@ -231,6 +233,22 @@ class Handler(BaseHTTPRequestHandler):
             )
             VoiceprintRegistry().save(name, voiceprint_id)
         self.send_json(200, {"name": name, "voiceprintId": voiceprint_id})
+
+    def delete_voiceprint(self, body):
+        voiceprint_id = str(body.get("voiceprintId", "")).strip()
+        if not voiceprint_id:
+            raise ValueError("缺少声纹 ID")
+
+        with VOICEPRINT_LOCK:
+            registry = VoiceprintRegistry()
+            name = registry.name_for(voiceprint_id)
+            if name is None:
+                raise ValueError("本地不存在该声纹")
+            rtc_client().delete_voiceprint(
+                require_env("RTC_APP_ID"), voiceprint_id
+            )
+            registry.remove_by_id(voiceprint_id)
+        self.send_json(200, {"deleted": True, "name": name, "voiceprintId": voiceprint_id})
 
     def start_session(self, body):
         config = public_config()

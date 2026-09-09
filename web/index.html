@@ -3,31 +3,51 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#090611" />
+    <meta name="theme-color" content="#f5f5f7" />
+    <meta name="description" content="星语 AI 语音空间，提供自然、实时的语音对话体验。" />
     <title>星语 · AI 语音空间</title>
   </head>
   <body>
     <main class="shell">
       <header class="topbar">
-        <h1 class="brand"><span aria-hidden="true">✦</span> 星语</h1>
-        <button id="register" class="text-button" disabled>添加声纹</button>
+        <h1 class="brand">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span><strong>星语</strong><small>AI 语音空间</small></span>
+        </h1>
+        <div class="voiceprint-actions">
+          <button id="deleteVoiceprint" class="text-button danger" disabled>删除声纹</button>
+          <button id="register" class="text-button" disabled>添加声纹</button>
+        </div>
       </header>
       <section class="space" aria-label="语音对话">
         <div class="presence">
+          <p class="eyebrow">VOICE INTELLIGENCE</p>
           <div class="cosmos" aria-hidden="true">
             <div class="orbit"></div><div class="planet"></div>
           </div>
+          <h2>现在，开始自然地交谈。</h2>
           <div class="status-row" role="status" aria-live="polite">
             <span id="statusDot" class="dot"></span><span id="status">正在读取配置…</span>
           </div>
         </div>
         <section class="conversation-panel" aria-label="实时对话">
-          <div class="conversation-toolbar"><button id="clearConversation" class="text-button">清空对话</button></div>
+          <div class="conversation-toolbar">
+            <div><strong>实时对话</strong><span>文字会随语音同步出现</span></div>
+            <button id="clearConversation" class="text-button">清空</button>
+          </div>
           <ol id="conversation" aria-label="对话记录"></ol>
-          <p class="conversation-empty">想聊什么？</p>
+          <div class="conversation-empty">
+            <span class="empty-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <p>想聊些什么？</p>
+            <small>点击下方按钮，然后直接说话</small>
+          </div>
         </section>
         <div class="controls">
-          <div class="meter" aria-label="麦克风音量"><span id="meter"></span></div>
+          <div class="meter-wrap">
+            <span>麦克风</span>
+            <div class="meter" aria-label="麦克风音量"><span id="meter"></span></div>
+            <span>实时</span>
+          </div>
           <div class="actions">
             <button id="mute" disabled>麦克风静音</button>
             <button id="start" class="primary" disabled>开始对话</button>
@@ -36,7 +56,7 @@
         </div>
       </section>
       <details class="settings">
-        <summary>连接详情</summary>
+        <summary>会话信息</summary>
         <div class="settings-content">
           <dl class="meta">
             <div><dt>房间</dt><dd id="room">—</dd></div>
@@ -58,6 +78,18 @@
         <label for="registerName">姓名</label><input id="registerName" maxlength="80" autocomplete="name" placeholder="怎么称呼你？" />
         <div id="registerProgress" class="register-progress" hidden><div class="register-status" role="status"><strong id="registerCountdown">准备录音</strong><span id="registerHint">请保持自然、连续地说话</span></div><progress id="registerBar" max="20" value="0" aria-label="声纹录制进度"></progress><div class="voiceprint-meter" aria-label="录音音量"><span id="voiceprintMeter"></span></div></div>
         <div class="register-actions"><button id="registerCancel" type="button">取消</button><button id="registerConfirm" type="button" class="primary">开始录音</button></div>
+      </div>
+    </dialog>
+    <dialog id="deleteVoiceprintPanel" class="register-dialog" aria-labelledby="deleteVoiceprintTitle">
+      <div class="dialog-content">
+        <h2 id="deleteVoiceprintTitle">删除声纹</h2>
+        <p>删除后，云端声纹及本地姓名映射都将被移除，且无法恢复。</p>
+        <label for="deleteVoiceprintSelect">选择声纹</label>
+        <select id="deleteVoiceprintSelect"></select>
+        <div class="register-actions">
+          <button id="deleteVoiceprintCancel" type="button">取消</button>
+          <button id="deleteVoiceprintConfirm" type="button" class="danger">确认删除</button>
+        </div>
       </div>
     </dialog>
     <script type="module" src="/src/main.js"></script>

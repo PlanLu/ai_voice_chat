@@ -34,6 +34,10 @@ class VoiceprintRegistryTests(unittest.TestCase):
             self.assertEqual(registry.name_for("vp-1"), "张三")
             self.assertEqual(registry.voiceprint_ids(), ["vp-1", "vp-2"])
 
+            self.assertEqual(registry.remove_by_id("vp-1"), "张三")
+            self.assertEqual(registry.load(), {"李四": "vp-2"})
+            self.assertIsNone(registry.remove_by_id("missing"))
+
 
 class RTCVoiceChatTests(unittest.TestCase):
     @patch.dict(os.environ, RTC_ENV, clear=False)

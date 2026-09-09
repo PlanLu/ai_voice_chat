@@ -10,6 +10,8 @@ import { VoiceprintRecorder } from './voiceprint-recorder.js';
 
 const ui = Object.fromEntries([
   'statusDot', 'status', 'room', 'user', 'voiceprint', 'start', 'register',
+  'deleteVoiceprint', 'deleteVoiceprintPanel', 'deleteVoiceprintSelect',
+  'deleteVoiceprintConfirm', 'deleteVoiceprintCancel',
   'mute', 'stop', 'meter', 'conversation', 'clearConversation', 'log', 'clear',
   'registerPanel', 'registerName', 'registerConfirm', 'registerCancel',
   'registerProgress', 'registerCountdown', 'registerHint', 'registerBar',
@@ -215,6 +217,56 @@ function openVoiceprintDialog() {
   ui.registerName.focus();
 }
 
+function openDeleteVoiceprintDialog() {
+  const entries = Object.entries(config.voiceprints || {});
+  ui.deleteVoiceprintSelect.replaceChildren();
+  for (const [voiceprintId, name] of entries) {
+    const option = document.createElement('option');
+    option.value = voiceprintId;
+    option.textContent = `${name}（${voiceprintId}）`;
+    ui.deleteVoiceprintSelect.append(option);
+  }
+  if (!entries.length) {
+    state.transition(SessionState.READY, '当前没有可删除的声纹', { tone: 'warn' });
+    return;
+  }
+  ui.deleteVoiceprintPanel.showModal();
+  ui.deleteVoiceprintSelect.focus();
+}
+
+function closeDeleteVoiceprintDialog() {
+  if (ui.deleteVoiceprintPanel.open) ui.deleteVoiceprintPanel.close();
+}
+
+async function deleteSelectedVoiceprint() {
+  const voiceprintId = ui.deleteVoiceprintSelect.value;
+  const name = config.voiceprints?.[voiceprintId];
+  if (!voiceprintId || !name) return;
+  if (!window.confirm(`确定删除“${name}”的声纹吗？此操作无法恢复。`)) return;
+
+  ui.deleteVoiceprintSelect.disabled = true;
+  ui.deleteVoiceprintConfirm.disabled = true;
+  ui.deleteVoiceprintCancel.disabled = true;
+  state.transition(SessionState.DELETING_VOICEPRINT, `正在删除“${name}”的声纹…`);
+  try {
+    const result = await api('/api/voiceprint/delete', {
+      method: 'POST',
+      body: JSON.stringify({ voiceprintId }),
+    });
+    updatePublicConfig(await api('/api/config'));
+    closeDeleteVoiceprintDialog();
+    log.add(`声纹已删除：${result.name}`, { voiceprintId: result.voiceprintId });
+    state.transition(SessionState.READY, '声纹已从云端和本地删除');
+  } catch (error) {
+    log.add('删除声纹失败', { message: error.message, voiceprintId });
+    state.transition(SessionState.ERROR, error.message);
+  } finally {
+    ui.deleteVoiceprintSelect.disabled = false;
+    ui.deleteVoiceprintConfirm.disabled = false;
+    ui.deleteVoiceprintCancel.disabled = false;
+  }
+}
+
 function closeVoiceprintDialog() {
   if (ui.registerPanel.open) ui.registerPanel.close();
   resetVoiceprintDialog();
@@ -292,6 +344,13 @@ ui.start.addEventListener('click', startConversation);
 ui.stop.addEventListener('click', stopConversation);
 ui.mute.addEventListener('click', toggleMute);
 ui.register.addEventListener('click', openVoiceprintDialog);
+ui.deleteVoiceprint.addEventListener('click', openDeleteVoiceprintDialog);
+ui.deleteVoiceprintConfirm.addEventListener('click', deleteSelectedVoiceprint);
+ui.deleteVoiceprintCancel.addEventListener('click', closeDeleteVoiceprintDialog);
+ui.deleteVoiceprintPanel.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  closeDeleteVoiceprintDialog();
+});
 ui.registerConfirm.addEventListener('click', registerVoiceprint);
 ui.registerCancel.addEventListener('click', cancelVoiceprint);
 ui.registerPanel.addEventListener('cancel', (event) => {

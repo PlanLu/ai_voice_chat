@@ -7,6 +7,7 @@ export const SessionState = Object.freeze({
   ACTIVE: 'active',
   STOPPING: 'stopping',
   RECORDING_VOICEPRINT: 'recording-voiceprint',
+  DELETING_VOICEPRINT: 'deleting-voiceprint',
   ERROR: 'error',
 });
 
@@ -17,6 +18,7 @@ const BUSY_STATES = new Set([
   SessionState.STARTING_AGENT,
   SessionState.STOPPING,
   SessionState.RECORDING_VOICEPRINT,
+  SessionState.DELETING_VOICEPRINT,
 ]);
 
 export class SessionStateMachine {
@@ -35,6 +37,7 @@ export class SessionStateMachine {
 
     this.ui.start.disabled = !(ready || recoverableError);
     this.ui.register.disabled = !(ready || recoverableError);
+    this.ui.deleteVoiceprint.disabled = !(ready || recoverableError);
     this.ui.mute.disabled = !active;
     this.ui.stop.disabled = !(active || canStop);
 

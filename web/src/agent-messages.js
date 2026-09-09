@@ -28,12 +28,13 @@ function describeAiError(code, reason = '') {
   return `${description}${authorization}`;
 }
 
-export function createAgentMessageHandler({ getConfig, conversation, log, onError }) {
+export function createAgentMessageHandler({ getConfig, conversation, log, onError, onSubtitleRaw }) {
   return (event) => {
     try {
       const decoded = decodeTlv(event.message);
       if (decoded?.type === 'subv' && Array.isArray(decoded.payload?.data)) {
         for (const subtitle of decoded.payload.data) {
+          onSubtitleRaw?.(subtitle);
           conversation.render(subtitle, getConfig());
         }
         return;

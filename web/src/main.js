@@ -3,6 +3,7 @@ import './style.css';
 import { createAgentMessageHandler } from './agent-messages.js';
 import { api } from './api.js';
 import { ConversationView, EventLog } from './feeds.js';
+import { LatencyTracker } from './latency-tracker.js';
 import { RtcSession } from './rtc-session.js';
 import { SessionState, SessionStateMachine } from './session-state.js';
 import { VoiceprintRecorder } from './voiceprint-recorder.js';
@@ -20,6 +21,22 @@ const log = new EventLog(ui.log, 300);
 const state = new SessionStateMachine(ui);
 const voiceprintRecorder = new VoiceprintRecorder(20);
 
+const fmtMs = (value) => (value == null ? '—' : `${Math.round(value)} ms`);
+// 调试开关：URL 加 ?latencyDebug 即在控制台打印每条原始 subv 字幕，
+// 用于核对 userId/definite/text 等字段是否被正确分类为用户/助手。
+const LATENCY_DEBUG = new URLSearchParams(window.location.search).has('latencyDebug');
+const tracker = new LatencyTracker({
+  log,
+  onTurn: (turn, metrics) => {
+    log.add(`第 ${turn.index} 轮延迟`, {
+      指标1: fmtMs(metrics.metric1),
+      指标2: fmtMs(metrics.metric2),
+      指标3: fmtMs(metrics.metric3),
+    });
+  },
+});
+conversation.onRender = (info) => tracker.onSubtitle(info);
+
 let config;
 let taskId;
 let botTimer;
@@ -28,6 +45,10 @@ const handleAgentMessage = createAgentMessageHandler({
   getConfig: () => config,
   conversation,
   log,
+  onSubtitleRaw: (subtitle) => {
+    if (!LATENCY_DEBUG) return;
+    console.log(`[subv ${performance.now().toFixed(1)}ms]`, JSON.stringify(subtitle));
+  },
   onError: (message) => state.transition(
     SessionState.ERROR,
     message,
@@ -54,7 +75,9 @@ const rtc = new RtcSession({
   },
   onVolume: (level) => {
     ui.meter.style.width = `${level}%`;
+    tracker.onLocalVolume(level);
   },
+  onRemoteVolume: (level) => tracker.onRemoteVolume(level),
 });
 
 function updatePublicConfig(nextConfig) {
@@ -64,7 +87,35 @@ function updatePublicConfig(nextConfig) {
   ui.voiceprint.textContent = `${config.voiceprintCount} 个`;
 }
 
+// 结束对话时汇总各轮 T0-T4，上报后端写入 test.log。
+async function reportLatency() {
+  const summary = tracker.finalize();
+  if (!summary.totalTurns) return;
+  tracker.reset();
+  try {
+    const result = await api('/api/latency/report', {
+      method: 'POST',
+      body: JSON.stringify({ roomId: config.roomId, ...summary }),
+    });
+    log.add('延迟测试已写入 test.log', {
+      轮次: summary.totalTurns,
+      指标1均值: fmtMs(result.averages?.metric1),
+      指标2均值: fmtMs(result.averages?.metric2),
+      指标3均值: fmtMs(result.averages?.metric3),
+    });
+    console.table(summary.turns.map((turn) => ({
+      轮次: turn.index,
+      '指标1(ms)': turn.metric1 == null ? null : Math.round(turn.metric1),
+      '指标2(ms)': turn.metric2 == null ? null : Math.round(turn.metric2),
+      '指标3(ms)': turn.metric3 == null ? null : Math.round(turn.metric3),
+    })));
+  } catch (error) {
+    log.add('延迟报告写入失败', { message: error.message });
+  }
+}
+
 async function startConversation() {
+  tracker.reset();
   state.transition(SessionState.REQUESTING_MEDIA, '正在申请麦克风权限…');
   try {
     await rtc.join(config);
@@ -105,6 +156,7 @@ async function startConversation() {
 
 async function stopConversation() {
   state.transition(SessionState.STOPPING, '正在结束对话…', { canStop: false });
+  await reportLatency();
   try {
     if (taskId) {
       const result = await api('/api/session/stop', {

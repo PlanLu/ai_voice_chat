@@ -1,13 +1,23 @@
 import VERTC, { MediaType, RoomProfileType } from '@volcengine/rtc';
 
+// 音量上报间隔（ms）。延迟测量需要较细的时间粒度，故从默认 300ms 调小。
+const AUDIO_REPORT_INTERVAL_MS = 50;
+
+// 从音量上报回调的数据结构中提取归一化到 0-100 的音量值。
+function audioLevel(item, fallback) {
+  const level = item?.audioPropertiesInfo?.linearVolume ?? item?.linearVolume ?? fallback ?? 0;
+  return Math.min(100, level);
+}
+
 export class RtcSession {
-  constructor({ log, onAgentMessage, onBotJoined, onError, onJoining, onVolume }) {
+  constructor({ log, onAgentMessage, onBotJoined, onError, onJoining, onVolume, onRemoteVolume }) {
     this.log = log;
     this.onAgentMessage = onAgentMessage;
     this.onBotJoined = onBotJoined;
     this.onError = onError;
     this.onJoining = onJoining;
     this.onVolume = onVolume;
+    this.onRemoteVolume = onRemoteVolume;
     this.engine = undefined;
     this.joined = false;
     this.muted = false;
@@ -22,7 +32,7 @@ export class RtcSession {
 
     this.engine = VERTC.createEngine(config.appId);
     this.bindEvents(config);
-    this.engine.enableAudioPropertiesReport({ interval: 300 });
+    this.engine.enableAudioPropertiesReport({ interval: AUDIO_REPORT_INTERVAL_MS });
     await this.engine.startAudioCapture();
     this.onJoining();
     await this.engine.joinRoom(
@@ -66,14 +76,21 @@ export class RtcSession {
       this.onError('请点击页面允许播放声音', true);
     });
     this.engine.on(VERTC.events.onLocalAudioPropertiesReport, (items) => {
-      const level = Math.min(
-        100,
-        items?.[0]?.audioPropertiesInfo?.linearVolume
-          ?? items?.[0]?.linearVolume
-          ?? 0
-      );
-      this.onVolume(level);
+      this.onVolume(audioLevel(items?.[0]));
     });
+    // 远端(bot)音量上报：用于检测 TTS 首帧播报。部分 SDK 版本无此事件，做存在性保护。
+    if (VERTC.events.onRemoteAudioPropertiesReport) {
+      this.engine.on(VERTC.events.onRemoteAudioPropertiesReport, (items, totalRemoteVolume) => {
+        const list = Array.isArray(items) ? items : [items];
+        const bot = list.find(
+          (item) => (item?.userId ?? item?.audioPropertiesInfo?.userId) === config.botUserId
+        );
+        const level = audioLevel(bot ?? list[0], totalRemoteVolume != null
+          ? Math.min(100, totalRemoteVolume)
+          : undefined);
+        this.onRemoteVolume?.(level);
+      });
+    }
     this.engine.on(VERTC.events.onRoomBinaryMessageReceived, this.onAgentMessage);
     this.engine.on(VERTC.events.onUserBinaryMessageReceived, this.onAgentMessage);
   }

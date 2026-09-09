@@ -6,6 +6,7 @@ import os
 import threading
 import traceback
 import uuid
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -20,9 +21,11 @@ from vvc.shared.voiceprint_registry import VoiceprintRegistry
 
 ROOT = Path(__file__).resolve().parents[2]
 WEB_DIST = ROOT / "web" / "dist"
+LATENCY_LOG = ROOT / "test.log"
 ACTIVE_TASKS = {}
 TASK_LOCK = threading.Lock()
 VOICEPRINT_LOCK = threading.Lock()
+LATENCY_LOCK = threading.Lock()
 
 
 def require_env(name):
@@ -60,6 +63,95 @@ def response_summary(response):
         "action": metadata.get("Action"),
         "result": response.get("Result"),
     }
+
+
+def _fmt_ms(value):
+    return "—" if value is None else f"{value:.0f}"
+
+
+def _turn_metrics(turn):
+    """从一轮的 T0-T4 原始时间戳（ms）计算三项指标。
+
+    指标1/2 仅在 T1/T2 来自真实用户字幕时才统计；由助手字幕兜底填充
+    的样本（说明该轮未抓到用户字幕）会被剔除，以免污染均值。
+    指标3 允许为负：负值说明 TTS 音频早于助手字幕上屏。
+    aborted=True 的轮次（对话结束时未完成）三项指标均为 None。
+    """
+    if turn.get("aborted"):
+        return None, None, None
+    t0 = turn.get("t0")
+    t1 = turn.get("t1")
+    t2 = turn.get("t2")
+    t3 = turn.get("t3")
+    t4 = turn.get("t4")
+    metric1 = (
+        t1 - t0
+        if t0 is not None and t1 is not None
+        and turn.get("t0Source") == "volume" and turn.get("t1Source") == "user"
+        else None
+    )
+    metric2 = (
+        t3 - t2
+        if t2 is not None and t3 is not None and turn.get("t2Source") == "user"
+        else None
+    )
+    metric3 = t4 - t3 if t3 is not None and t4 is not None else None
+    return metric1, metric2, metric3
+
+
+def build_latency_report(payload):
+    """把前端上报的各轮 T0-T4 汇总成 test.log 文本，并返回平均值。"""
+    turns = payload.get("turns") or []
+    samples = [[], [], []]
+    detail_lines = []
+    for turn in turns:
+        metric1, metric2, metric3 = _turn_metrics(turn)
+        for bucket, value in zip(samples, (metric1, metric2, metric3)):
+            if value is not None:
+                bucket.append(value)
+        raw = (
+            f"T0={_fmt_ms(turn.get('t0'))} T1={_fmt_ms(turn.get('t1'))} "
+            f"T2={_fmt_ms(turn.get('t2'))} T3={_fmt_ms(turn.get('t3'))} "
+            f"T4={_fmt_ms(turn.get('t4'))}"
+        )
+        if turn.get("aborted"):
+            note = "  [注:对话结束时本轮未完成，已排除]"
+        elif turn.get("t1Source") == "assistant-fallback" or turn.get("t2Source") == "assistant-fallback":
+            note = "  [注:未抓到用户字幕，指标1/2 已排除]"
+        elif turn.get("t0Source") == "subtitle":
+            note = "  [注:T0 来自字幕兜底，指标1 已排除]"
+        else:
+            note = ""
+        detail_lines.append(
+            f"轮次 {turn.get('index', '?')}: "
+            f"指标1={_fmt_ms(metric1)}ms 指标2={_fmt_ms(metric2)}ms 指标3={_fmt_ms(metric3)}ms"
+            f"  [{raw}]{note}"
+        )
+    averages = [
+        (sum(bucket) / len(bucket)) if bucket else None for bucket in samples
+    ]
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "=" * 64,
+        f"RTC 网页模式延迟测试报告  {now}",
+        f"房间: {payload.get('roomId', '-')}   总轮次: {len(turns)}",
+        "说明: T0说话 T1 ASR首字 T2识别结束 T3回复首字 T4 TTS首帧（均为 ms）",
+        "-" * 64,
+    ]
+    lines.extend(detail_lines or ["（本次无有效对话轮次）"])
+    lines.extend([
+        "-" * 64,
+        f"平均:  指标1(说话→ASR首字)={_fmt_ms(averages[0])}ms (样本{len(samples[0])})  "
+        f"指标2(识别结束→回复首字)={_fmt_ms(averages[1])}ms (样本{len(samples[1])})  "
+        f"指标3(回复首字→TTS首帧)={_fmt_ms(averages[2])}ms (样本{len(samples[2])})",
+        "=" * 64,
+    ])
+    summary = {
+        "metric1": averages[0],
+        "metric2": averages[1],
+        "metric3": averages[2],
+    }
+    return "\n".join(lines), summary
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -108,6 +200,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.stop_session(body)
             elif path == "/api/voiceprint/register":
                 self.register_voiceprint(body)
+            elif path == "/api/latency/report":
+                self.report_latency(body)
             else:
                 self.send_json(404, {"error": "接口不存在"})
         except Exception as exc:
@@ -167,6 +261,19 @@ class Handler(BaseHTTPRequestHandler):
             "taskId": task_id,
             "reused": False,
             "openApi": response_summary(response),
+        })
+
+    def report_latency(self, body):
+        text, averages = build_latency_report(body)
+        with LATENCY_LOCK:
+            with open(LATENCY_LOG, "a", encoding="utf-8") as handle:
+                handle.write(text + "\n\n")
+        print(text)
+        self.send_json(200, {
+            "ok": True,
+            "path": str(LATENCY_LOG),
+            "totalTurns": len(body.get("turns") or []),
+            "averages": averages,
         })
 
     def stop_session(self, body):

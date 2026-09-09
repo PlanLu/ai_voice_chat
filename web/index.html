@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#090611" />
+    <title>星语 · AI 语音空间</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <h1 class="brand"><span aria-hidden="true">✦</span> 星语</h1>
+        <button id="register" class="text-button" disabled>添加声纹</button>
+      </header>
+      <section class="space" aria-label="语音对话">
+        <div class="presence">
+          <div class="cosmos" aria-hidden="true">
+            <div class="orbit"></div><div class="planet"></div>
+          </div>
+          <div class="status-row" role="status" aria-live="polite">
+            <span id="statusDot" class="dot"></span><span id="status">正在读取配置…</span>
+          </div>
+        </div>
+        <section class="conversation-panel" aria-label="实时对话">
+          <div class="conversation-toolbar"><button id="clearConversation" class="text-button">清空对话</button></div>
+          <ol id="conversation" aria-label="对话记录"></ol>
+          <p class="conversation-empty">想聊什么？</p>
+        </section>
+        <div class="controls">
+          <div class="meter" aria-label="麦克风音量"><span id="meter"></span></div>
+          <div class="actions">
+            <button id="mute" disabled>麦克风静音</button>
+            <button id="start" class="primary" disabled>开始对话</button>
+            <button id="stop" class="danger" disabled>结束对话</button>
+          </div>
+        </div>
+      </section>
+      <details class="settings">
+        <summary>连接详情</summary>
+        <div class="settings-content">
+          <dl class="meta">
+            <div><dt>房间</dt><dd id="room">—</dd></div>
+            <div><dt>用户</dt><dd id="user">—</dd></div>
+            <div><dt>声纹</dt><dd id="voiceprint">—</dd></div>
+          </dl>
+          <details class="log-panel">
+            <summary>运行日志</summary>
+            <header><button id="clear" class="text-button">清空日志</button></header>
+            <ol id="log" data-empty="暂无日志"></ol>
+          </details>
+        </div>
+      </details>
+    </main>
+    <dialog id="registerPanel" class="register-dialog" aria-labelledby="registerTitle">
+      <div class="dialog-content">
+        <h2 id="registerTitle">添加声纹</h2>
+        <p>输入姓名，录制 20 秒语音即可注册。</p>
+        <label for="registerName">姓名</label><input id="registerName" maxlength="80" autocomplete="name" placeholder="怎么称呼你？" />
+        <div id="registerProgress" class="register-progress" hidden><div class="register-status" role="status"><strong id="registerCountdown">准备录音</strong><span id="registerHint">请保持自然、连续地说话</span></div><progress id="registerBar" max="20" value="0" aria-label="声纹录制进度"></progress><div class="voiceprint-meter" aria-label="录音音量"><span id="voiceprintMeter"></span></div></div>
+        <div class="register-actions"><button id="registerCancel" type="button">取消</button><button id="registerConfirm" type="button" class="primary">开始录音</button></div>
+      </div>
+    </dialog>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
